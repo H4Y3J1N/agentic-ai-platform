@@ -1,0 +1,57 @@
+# Istio VirtualService - Traffic Splitting
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: ecommerce-ai-vsvc
+  namespace: agentic-ai
+spec:
+  hosts:
+  - ecommerce-ai
+  
+  http:
+  - match:
+    - uri:
+        prefix: /
+    
+    route:
+    - destination:
+        host: ecommerce-ai
+        subset: stable
+      weight: 100
+    
+    - destination:
+        host: ecommerce-ai
+        subset: canary
+      weight: 0
+    
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+
+---
+# DestinationRule
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: ecommerce-ai-dr
+  namespace: agentic-ai
+spec:
+  host: ecommerce-ai
+  
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+  
+  subsets:
+  - name: stable
+    labels:
+      version: stable
+  
+  - name: canary
+    labels:
+      version: canary

@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecommerce-ai
+  namespace: agentic-ai
+  labels:
+    app: ecommerce-ai
+    version: v1
+spec:
+  replicas: 3
+  
+  # 무중단 배포 전략: RollingUpdate
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1          # 최대 1개 추가 Pod (총 4개)
+      maxUnavailable: 0    # 최소 3개 항상 유지
+  
+  selector:
+    matchLabels:
+      app: ecommerce-ai
+  
+  template:
+    metadata:
+      labels:
+        app: ecommerce-ai
+        version: v1
+    
+    spec:
+      # Graceful Shutdown 시간
+      terminationGracePeriodSeconds: 60
+      
+      containers:
+      - name: api
+        image: ecommerce-ai:latest
+        imagePullPolicy: Always
+        
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        
+        # Environment Variables
+        env:
+        - name: REDIS_URL
+          value: "redis://redis:6379"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: ecommerce-secrets
+              key: database-url
+        - name: MILVUS_HOST
+          value: "milvus"
+        
+        # Resource Limits (무중단 배포 중요!)
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        
+        # Health Checks (무중단 배포 핵심!)
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        
+        startupProbe:
+          httpGet:
+            path: /startup
+            port: 8000
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 30  # 최대 150초 대기
+        
+        # Graceful Shutdown Hook
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                echo "PreStop hook: waiting 30s for connection draining..."
+                sleep 30
+---
+# PodDisruptionBudget - 무중단 배포 보장
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ecommerce-ai-pdb
+  namespace: agentic-ai
+spec:
+  minAvailable: 2  # 최소 2개 Pod 항상 유지
+  selector:
+    matchLabels:
+      app: ecommerce-ai

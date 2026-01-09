@@ -1,0 +1,18 @@
+# API 설정
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  reload: false
+  
+  cors:
+    allow_origins:
+      - "http://localhost:3000"
+      - "https://ecommerce.example.com"
+    allow_methods: ["*"]
+    allow_headers: ["*"]
+    allow_credentials: true
+  
+  timeouts:
+    request: 30
+    keepalive: 5
