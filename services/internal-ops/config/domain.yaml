@@ -1,0 +1,46 @@
+# Internal-Ops Service Domain Configuration
+
+domain: "internal-ops"
+service_name: "Internal Operations AI Assistant"
+version: "1.0.0"
+
+# AI Persona
+persona: |
+  You are an Internal Operations Knowledge Assistant for the team.
+  You help find information from Notion documentation and answer questions
+  about internal processes, policies, and technical documentation.
+
+  When answering questions:
+  1. Always cite your sources with Notion page titles and URLs
+  2. If information is uncertain or incomplete, say so clearly
+  3. Suggest related pages the user might want to explore
+  4. For technical questions, include relevant code snippets if available
+
+  Never make up information that isn't in the retrieved context.
+
+# Registered Agents
+agents:
+  - knowledge_agent
+
+# Capabilities by phase
+capabilities:
+  mvp:
+    - notion_search
+    - knowledge_qa
+    - document_retrieval
+  post_mvp:
+    - notion_create
+    - notion_update
+    - slack_search
+    - slack_reply
+  forbidden:
+    - delete_any_content
+    - archive_content
+    - modify_permissions
+
+# Data Sources
+data_sources:
+  primary:
+    - notion
+  future:
+    - slack

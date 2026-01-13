@@ -1,0 +1,168 @@
+"""
+Notion Search Tool - RAG-based semantic search over Notion content
+"""
+
+from typing import List, Dict, Any, Optional
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class NotionSearchTool:
+    """RAG-based semantic search over Notion content"""
+
+    def __init__(self, config: dict = None):
+        self.config = config or {}
+        self.name = "NotionSearchTool"
+        self.description = "Search internal Notion documentation using natural language"
+
+        self._chroma_client = None
+        self._collection = None
+        self._openai_client = None
+
+    async def _ensure_initialized(self):
+        """Lazy initialization of ChromaDB and OpenAI"""
+        if self._collection is not None:
+            return
+
+        try:
+            import chromadb
+            from chromadb.config import Settings
+        except ImportError:
+            raise ImportError("chromadb is required")
+
+        persist_dir = self.config.get("persist_dir", os.environ.get("CHROMA_PERSIST_DIR", "./data/chroma"))
+        collection_name = self.config.get("collection_name", "internal_ops_notion")
+
+        self._chroma_client = chromadb.PersistentClient(
+            path=persist_dir,
+            settings=Settings(anonymized_telemetry=False)
+        )
+
+        self._collection = self._chroma_client.get_or_create_collection(
+            name=collection_name,
+            metadata={"hnsw:space": "cosine"}
+        )
+
+        logger.info(f"NotionSearchTool initialized with collection '{collection_name}'")
+
+    async def _get_embedding(self, text: str) -> List[float]:
+        """Get embedding for query text"""
+        try:
+            import openai
+        except ImportError:
+            raise ImportError("openai is required")
+
+        if self._openai_client is None:
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY environment variable required")
+            self._openai_client = openai.OpenAI(api_key=api_key)
+
+        model = self.config.get("embedding_model", "text-embedding-3-small")
+
+        response = self._openai_client.embeddings.create(
+            model=model,
+            input=[text]
+        )
+
+        return response.data[0].embedding
+
+    async def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        filters: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Search Notion content semantically.
+
+        Args:
+            query: Natural language search query
+            top_k: Number of results to return
+            filters: Optional filters (e.g., {"database_id": "xxx"})
+
+        Returns:
+            List of matching documents with content and metadata
+        """
+        await self._ensure_initialized()
+
+        # Get query embedding
+        query_embedding = await self._get_embedding(query)
+
+        # Build where clause for filters
+        where_clause = None
+        if filters:
+            # ChromaDB where clause format
+            conditions = []
+            for key, value in filters.items():
+                if value is not None:
+                    conditions.append({key: {"$eq": value}})
+
+            if len(conditions) == 1:
+                where_clause = conditions[0]
+            elif len(conditions) > 1:
+                where_clause = {"$and": conditions}
+
+        # Query ChromaDB
+        results = self._collection.query(
+            query_embeddings=[query_embedding],
+            n_results=min(top_k, 20),
+            where=where_clause,
+            include=["documents", "metadatas", "distances"]
+        )
+
+        # Format results
+        formatted_results = []
+        if results and results["ids"] and results["ids"][0]:
+            for i, doc_id in enumerate(results["ids"][0]):
+                distance = results["distances"][0][i] if results["distances"] else 0.0
+                # Convert distance to similarity score (1 - distance for cosine)
+                relevance_score = 1.0 - distance
+
+                metadata = results["metadatas"][0][i] if results["metadatas"] else {}
+
+                formatted_results.append({
+                    "id": doc_id,
+                    "content": results["documents"][0][i] if results["documents"] else "",
+                    "title": metadata.get("title", "Untitled"),
+                    "url": metadata.get("notion_url", ""),
+                    "relevance_score": relevance_score,
+                    "last_edited": metadata.get("last_edited_time"),
+                    "metadata": metadata
+                })
+
+        logger.info(f"Search for '{query}' returned {len(formatted_results)} results")
+        return formatted_results
+
+    async def search_by_page_title(
+        self,
+        title_query: str,
+        top_k: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for pages by title similarity.
+
+        Args:
+            title_query: Title search query
+            top_k: Number of results
+
+        Returns:
+            Matching pages
+        """
+        # Use the title as the search query
+        return await self.search(
+            query=f"page titled: {title_query}",
+            top_k=top_k
+        )
+
+    async def get_collection_stats(self) -> Dict[str, Any]:
+        """Get statistics about the indexed collection"""
+        await self._ensure_initialized()
+
+        return {
+            "collection_name": self._collection.name,
+            "document_count": self._collection.count(),
+            "metadata": self._collection.metadata
+        }

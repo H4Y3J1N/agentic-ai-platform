@@ -1,0 +1,21 @@
+# WebSocket 설정
+websocket:
+  enabled: true
+  
+  # 연결 설정
+  connection:
+    max_connections: 1000
+    max_message_size: 65536  # 64KB
+    ping_interval: 30
+    ping_timeout: 10
+  
+  # 세션 설정
+  session:
+    ttl: 3600  # 1시간
+    storage: "redis"
+  
+  # 메시지 큐
+  message_queue:
+    enabled: true
+    backend: "redis"
+    max_queue_size: 1000

@@ -1,0 +1,42 @@
+# Rate Limiting 설정
+rate_limit:
+  enabled: true
+  
+  # Token Bucket 설정
+  token_bucket:
+    capacity: 100        # 버킷 최대 용량
+    refill_rate: 10      # 초당 리필 속도
+  
+  # Redis 기반 분산 Rate Limiting
+  redis:
+    enabled: true
+    url: "${REDIS_URL}"
+    prefix: "rate_limit"
+  
+  # 엔드포인트별 제한
+  endpoints:
+    "/agent/chat":
+      max_requests: 60
+      window_seconds: 60
+    
+    "/agent/chat/stream":
+      max_requests: 30
+      window_seconds: 60
+    
+    "/ws/chat/*":
+      max_requests: 100
+      window_seconds: 60
+  
+  # 역할별 제한
+  roles:
+    customer:
+      max_requests: 60
+      window_seconds: 60
+    
+    merchant:
+      max_requests: 600
+      window_seconds: 60
+    
+    admin:
+      max_requests: 6000
+      window_seconds: 60

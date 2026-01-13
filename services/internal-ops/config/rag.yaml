@@ -1,0 +1,39 @@
+# RAG (Retrieval-Augmented Generation) Configuration
+
+rag:
+  # Embedding Configuration
+  embedding:
+    provider: "openai"
+    model: "text-embedding-3-small"
+    dimension: 1536
+    # Alternative: Local embedding (for cost savings)
+    # provider: "local"
+    # model: "BAAI/bge-m3"
+
+  # Vector Store
+  vector_store:
+    type: "chromadb"
+    persist_dir: "${CHROMA_PERSIST_DIR:./data/chroma}"
+    collection_name: "internal_ops_notion"
+    distance_metric: "cosine"
+
+  # Chunking Strategy
+  chunking:
+    strategy: "notion_aware"
+    chunk_size: 500
+    chunk_overlap: 50
+    preserve_headers: true
+    preserve_code_blocks: true
+    min_chunk_size: 100
+
+  # Retrieval Settings
+  retrieval:
+    default_top_k: 5
+    max_top_k: 20
+    reranking_enabled: false
+    min_relevance_score: 0.3
+
+  # Query Processing
+  query:
+    rewriting_enabled: true
+    expansion_enabled: false

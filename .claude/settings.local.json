@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(wc:*)",
+      "Bash(pip show:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m pip install:*)",
+      "Bash(python:*)",
+      "Bash(timeout 10 python:*)",
+      "Bash(set PYTHONPATH=packages/agentic-ai-core/src:*)",
+      "Bash(services/internal-ops)",
+      "Bash(PYTHONPATH=\"packages/agentic-ai-core/src:services/internal-ops\" python:*)",
+      "Bash(PYTHONPATH=\"../../packages/agentic-ai-core/src:.\" python:*)",
+      "Bash(curl:*)",
+      "Bash(PYTHONPATH=src python:*)"
+    ]
+  }
+}
