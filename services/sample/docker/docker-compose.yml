@@ -1,3 +1,6 @@
+# Sample Service - Docker Compose
+# 새 서비스 생성 시 이 파일을 복사하여 서비스명을 변경하세요.
+
 version: '3.8'
 
 services:
@@ -6,32 +9,48 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # Database
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/sample_db
       - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/ecommerce
-      - MILVUS_HOST=milvus
+      - CHROMA_PERSIST_DIR=/data/chroma
+      # LLM (환경변수로 주입)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Observability
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+      # TODO: 도메인별 환경변수 추가
+      # - NOTION_API_KEY=${NOTION_API_KEY}
+      # - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+    volumes:
+      - chroma_data:/data/chroma
     depends_on:
-      - redis
       - postgres
+      - redis
     restart: unless-stopped
-  
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: sample_db  # TODO: 서비스에 맞게 변경
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres  # TODO: 프로덕션에서는 시크릿 사용
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-  
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: ecommerce
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
 
 volumes:
-  redis_data:
   postgres_data:
+  redis_data:
+  chroma_data:

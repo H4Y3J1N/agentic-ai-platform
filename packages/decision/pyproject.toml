@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "agentic-ai-decision"
+version = "0.1.0"
+description = "Decision support extension for Agentic AI Platform"
+authors = ["Your Name <your.email@example.com>"]
+packages = [{include = "agentic_ai_decision"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+agentic-ai-core = {path = "../core", develop = true}
+agentic-ai-knowledge = {path = "../knowledge", develop = true, optional = true}
+pydantic = "^2.0"
+
+[tool.poetry.extras]
+knowledge = ["agentic-ai-knowledge"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

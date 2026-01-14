@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "agentic-ai-knowledge"
+version = "0.1.0"
+description = "Knowledge graph extension for Agentic AI Platform"
+authors = ["Your Name <your.email@example.com>"]
+packages = [{include = "agentic_ai_knowledge"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+agentic-ai-core = {path = "../core", develop = true}
+pydantic = "^2.0"
+neo4j = {version = "^5.0", optional = true}
+
+[tool.poetry.extras]
+neo4j = ["neo4j"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

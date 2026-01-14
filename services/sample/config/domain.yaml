@@ -1,0 +1,35 @@
+# Domain Configuration
+# 새 서비스 생성 시 이 파일을 도메인에 맞게 수정하세요.
+
+service:
+  name: "sample-service"
+  description: "샘플 도메인 서비스"
+  version: "0.1.0"
+
+# AI 어시스턴트 페르소나
+persona:
+  name: "샘플 어시스턴트"
+  role: "도메인 전문가"
+  description: |
+    이 어시스턴트는 샘플 도메인에 대한 질문에 답변합니다.
+    TODO: 도메인에 맞게 페르소나를 수정하세요.
+
+# 사용 가능한 에이전트
+agents:
+  - name: "sample_agent"
+    class: "sample_service.agents.SampleAgent"
+    description: "기본 샘플 에이전트"
+    enabled: true
+
+# 사용 가능한 도구
+tools:
+  - name: "sample_tool"
+    class: "sample_service.tools.SampleTool"
+    description: "샘플 도구"
+    enabled: true
+
+# 오케스트레이션 패턴
+orchestration:
+  pattern: "supervisor"  # supervisor, hierarchy, collaborative, sequential
+  max_iterations: 10
+  timeout: 60

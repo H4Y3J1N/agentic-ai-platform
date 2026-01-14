@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "sample-service"
+version = "0.1.0"
+description = "Sample domain service - copy this to create new services"
+authors = ["Your Name <your.email@example.com>"]
+packages = [{include = "sample_service"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+agentic-ai-core = {path = "../../packages/core", develop = true}
+# 선택적 패키지 - 필요시 주석 해제
+# agentic-ai-knowledge = {path = "../../packages/knowledge", develop = true}
+# agentic-ai-decision = {path = "../../packages/decision", develop = true}
+fastapi = "^0.100"
+uvicorn = "^0.23"
+pydantic = "^2.0"
+pydantic-settings = "^2.0"
+httpx = "^0.25"
+pyyaml = "^6.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4"
+pytest-asyncio = "^0.21"
+pytest-cov = "^4.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
