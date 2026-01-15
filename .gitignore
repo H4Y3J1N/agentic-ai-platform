@@ -23,7 +23,6 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-CLAUDE.md
 
 # PyInstaller
 *.manifest
@@ -60,6 +59,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+CLAUDE.md
+.claude
 
 # IDE
 .idea/
