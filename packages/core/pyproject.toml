@@ -15,6 +15,13 @@ tiktoken = "^0.5"
 httpx = "^0.25"
 pyyaml = "^6.0"
 
+# Optional vector stores
+pymilvus = {version = "^2.4", optional = true}
+
+[tool.poetry.extras]
+milvus = ["pymilvus"]
+all = ["pymilvus"]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
