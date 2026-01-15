@@ -12,11 +12,13 @@ A modular Agentic AI platform designed as a reusable template. Core philosophy: 
 
 ```
 agentic-ai-platform/
-├── packages/                    # 재사용 가능한 코어 라이브러리
-│   ├── core/                    # 필수 - 모든 도메인에서 사용
-│   ├── knowledge/               # 선택 - 지식그래프 필요 시
-│   ├── decision/                # 선택 - 의사결정 지원 필요 시
-│   └── serving/                 # 선택 - 로컬 모델 서빙 시 (vLLM, LoRA, 양자화)
+├── packages/                    # 재사용 가능한 코어 라이브러리 (레이어별 분리)
+│   ├── core/                    # 기본 인프라 (LLM, RAG, API)
+│   ├── pipeline/                # 데이터 처리 (ingestion, query, scoring, evaluation)
+│   ├── agents/                  # 에이전트 (orchestrator, base agents, tools)
+│   ├── knowledge/               # 지식그래프 (entity, graph, ontology)
+│   ├── decision/                # 의사결정 (scoring, lifecycle)
+│   └── serving/                 # 로컬 모델 서빙 (vLLM, LoRA, quantization)
 ├── services/                    # 도메인별 서비스
 │   ├── sample/                  # 템플릿 (새 서비스 생성 시 복사)
 │   └── internal-ops/            # 내부 운영 도구 서비스
@@ -27,12 +29,12 @@ agentic-ai-platform/
 
 | 도메인 유형 | 사용 패키지 |
 |------------|------------|
-| 단순 Q&A 챗봇 | `core` |
-| 문서 검색 RAG | `core` |
-| 지식 관리 시스템 | `core` + `knowledge` |
-| 내부 운영 도구 | `core` + `knowledge` + `decision` |
+| 단순 Q&A 챗봇 | `core` + `agents` |
+| 문서 검색 RAG | `core` + `pipeline` + `agents` |
+| 지식 관리 시스템 | `core` + `pipeline` + `agents` + `knowledge` |
+| 내부 운영 도구 | `core` + `pipeline` + `agents` + `knowledge` + `decision` |
 | 로컬 LLM 서빙 | `core` + `serving` |
-| 멀티테넌트 LoRA | `core` + `serving` |
+| 멀티테넌트 LoRA | `core` + `agents` + `serving` |
 
 자세한 사용법은 `docs/MODULE_GUIDE.md` 참조
 
@@ -58,58 +60,93 @@ python -m vllm.entrypoints.openai.api_server --model meta-llama/Llama-2-7b-hf --
 
 ## Architecture
 
-### packages/core (공통)
+### packages/core (기본 인프라)
 
 ```
-packages/core/agentic_ai_core/
-├── llm/             # LLM gateway (OpenAI, Anthropic, Ollama)
-├── rag/             # Vector search: chunker, embedder, retriever
+packages/core/agentic_core/
+├── llm/             # LLM gateway (OpenAI, Anthropic)
+│   └── providers/   # Provider implementations
+├── rag/             # Vector search
 │   └── stores/      # ChromaStore, MilvusStore
-├── ingestion/       # Data pipeline: Pipeline, Stages
-├── query/           # Hybrid search, query rewriting, fusion
-├── scoring/         # Relevance scoring, ROI calculation
-├── evaluation/      # 품질 평가: RAGEvaluator, LLMEvaluator, BenchmarkRunner
-├── orchestrator/    # Agent patterns: supervisor, hierarchy, collaborative, sequential
-├── api/             # SSE, WebSocket
-├── agents/          # Base agent classes
-├── tools/           # Base tool classes
+├── api/             # SSE, WebSocket, FastAPI utilities
+├── schema/          # 기본 스키마 (Document, Chunk)
 ├── security/        # RBAC, JWT, rate limiting
-└── schema/          # Document, Chunk (기본 스키마만)
+├── database/        # DB connection utilities
+└── observability/   # Langfuse integration
 ```
 
-### packages/knowledge (지식그래프용)
+### packages/pipeline (데이터 처리)
 
 ```
-packages/knowledge/agentic_ai_knowledge/
-├── schema/          # Entity, Relationship, EntityType, RelationType
-├── graph/           # GraphStore, InMemoryGraphStore, Neo4jGraphStore
-├── ontology/        # OntologyLoader, OntologyValidator
-└── extraction/      # ExtractStage (엔티티/관계 추출)
+packages/pipeline/agentic_pipeline/
+├── ingestion/       # 데이터 수집 파이프라인
+│   ├── stages/      # Parse, Infer, Vectorize, Store
+│   └── parsers/     # Notion, Slack 등
+├── query/           # 쿼리 처리
+│   ├── rewriter.py  # 쿼리 리라이팅
+│   ├── planner.py   # 쿼리 계획
+│   ├── hybrid.py    # 하이브리드 검색
+│   └── fusion.py    # 결과 융합
+├── scoring/         # 스코어링
+│   ├── relevance_scorer.py
+│   └── roi_calculator.py
+└── evaluation/      # 품질 평가
+    ├── rag_evaluator.py
+    ├── llm_evaluator.py
+    └── benchmark_runner.py
 ```
 
-### packages/decision (의사결정 지원용)
+### packages/agents (에이전트)
 
 ```
-packages/decision/agentic_ai_decision/
+packages/agents/agentic_agents/
+├── orchestrator/    # 오케스트레이션
+│   ├── patterns/    # supervisor, hierarchy, collaborative, sequential
+│   ├── message_bus.py
+│   └── workflow_engine.py
+├── base/            # 기본 에이전트
+│   ├── base_agent.py
+│   ├── streaming_agent.py
+│   └── agent_registry.py
+└── tools/           # 기본 도구
+    ├── base_tool.py
+    └── tool_registry.py
+```
+
+### packages/knowledge (지식그래프)
+
+```
+packages/knowledge/agentic_knowledge/
+├── schema/          # Entity, Relationship
+├── graph/           # GraphStore (memory, neo4j)
+│   └── stores/
+├── ontology/        # OntologyLoader, Validator
+└── extraction/      # 엔티티/관계 추출
+```
+
+### packages/decision (의사결정)
+
+```
+packages/decision/agentic_decision/
 ├── schema/          # DecisionType, DecisionMapping
 ├── scoring/         # DecisionScorer
-└── lifecycle/       # LifecycleManager, LifecycleScheduler
+└── lifecycle/       # LifecycleManager, Scheduler
 ```
 
-### packages/serving (로컬 모델 서빙용)
+### packages/serving (로컬 모델 서빙)
 
 ```
-packages/serving/agentic_ai_serving/
+packages/serving/agentic_serving/
 ├── vllm/            # vLLM 서버 연동
 │   ├── config.py    # VLLMConfig, VLLMModelConfig
-│   └── provider.py  # VLLMProvider (OpenAI-compatible API)
+│   └── provider.py  # VLLMProvider
 ├── lora/            # LoRA 어댑터 관리
-│   ├── config.py    # LoRAAdapter, TenantLoRAMapping, LoRAConfig
-│   ├── registry.py  # LoRAAdapterRegistry (등록/조회/테넌트 매핑)
-│   └── loader.py    # LoRALoader (LRU 캐시, 동적 로딩/언로딩)
+│   ├── config.py    # LoRAAdapter, TenantLoRAMapping
+│   ├── registry.py  # LoRAAdapterRegistry
+│   └── loader.py    # LoRALoader
 └── quantization/    # 양자화 설정
-    ├── config.py    # QLoRAConfig, EXL2Config, GPTQConfig, AWQConfig
-    └── utils.py     # 메모리 추정, 추천 양자화, 설정 검증
+    ├── config.py    # QLoRA, EXL2, GPTQ, AWQ
+    └── utils.py     # 메모리 추정, 추천
 ```
 
 ### services (도메인 서비스)
@@ -140,7 +177,7 @@ services/{service-name}/
 - SSE: `GET /agent/chat/stream`
 - WebSocket: `WS /ws/chat/{session_id}`
 
-**Orchestration** (`orchestrator/patterns/`):
+**Orchestration** (`agents/orchestrator/patterns/`):
 - `supervisor.py`: Delegates to specialist agents
 - `hierarchy.py`: Multi-level delegation
 - `collaborative.py`: Parallel execution, merge results
@@ -188,10 +225,12 @@ mv sample_service {new_service_name}_service
 
 3. Choose packages in `pyproject.toml`:
 ```toml
-agentic-ai-core = {path = "../../packages/core", develop = true}
-# agentic-ai-knowledge = {path = "../../packages/knowledge", develop = true}
-# agentic-ai-decision = {path = "../../packages/decision", develop = true}
-# agentic-ai-serving = {path = "../../packages/serving", develop = true}
+agentic-core = {path = "../../packages/core", develop = true}
+agentic-pipeline = {path = "../../packages/pipeline", develop = true}
+agentic-agents = {path = "../../packages/agents", develop = true}
+# agentic-knowledge = {path = "../../packages/knowledge", develop = true}
+# agentic-decision = {path = "../../packages/decision", develop = true}
+# agentic-serving = {path = "../../packages/serving", develop = true}
 ```
 
 4. Implement domain logic:
@@ -205,7 +244,7 @@ See `services/sample/README.md` for detailed guide.
 ### Vector Store (Milvus Lite)
 
 ```python
-from agentic_ai_core.rag.stores import MilvusStore
+from agentic_core.rag.stores import MilvusStore
 
 # 로컬 파일 기반 (Milvus Lite)
 store = MilvusStore(
@@ -215,12 +254,6 @@ store = MilvusStore(
     metric_type="COSINE"
 )
 
-# 서버 연결
-store = MilvusStore(
-    collection_name="documents",
-    uri="http://localhost:19530"
-)
-
 await store.insert(ids, texts, embeddings, metadatas)
 results = await store.search(query_embedding, top_k=5)
 ```
@@ -228,9 +261,8 @@ results = await store.search(query_embedding, top_k=5)
 ### Quality Evaluation
 
 ```python
-from agentic_ai_core.evaluation import RAGEvaluator, LLMEvaluator, EvaluationConfig
+from agentic_pipeline.evaluation import RAGEvaluator, EvaluationConfig, MetricType
 
-# RAG 평가
 config = EvaluationConfig(
     metrics=[MetricType.FAITHFULNESS, MetricType.ANSWER_RELEVANCE],
     thresholds={MetricType.FAITHFULNESS: 0.7}
@@ -243,16 +275,12 @@ results = await evaluator.evaluate(
     context=["컨텍스트1", "컨텍스트2"],
     ground_truth="정답"
 )
-
-# 배치 평가
-batch_results = await evaluator.evaluate_batch(samples)
-aggregates = evaluator.get_aggregate_scores(batch_results)
 ```
 
 ### vLLM Provider
 
 ```python
-from agentic_ai_serving import VLLMProvider, VLLMConfig
+from agentic_serving import VLLMProvider, VLLMConfig
 
 config = VLLMConfig(
     base_url="http://localhost:8000/v1",
@@ -261,12 +289,7 @@ config = VLLMConfig(
 )
 
 async with VLLMProvider(config) as provider:
-    # 일반 생성
     response = await provider.chat(messages)
-
-    # 스트리밍
-    async for chunk in provider.chat_stream(messages):
-        print(chunk.content, end="")
 
     # LoRA 어댑터 사용
     response = await provider.chat(messages, lora_adapter="customer-service-adapter")
@@ -275,9 +298,8 @@ async with VLLMProvider(config) as provider:
 ### Multi-tenant LoRA
 
 ```python
-from agentic_ai_serving import LoRAAdapterRegistry, LoRALoader, LoRAConfig, LoRAAdapter
+from agentic_serving import LoRAAdapterRegistry, LoRALoader, LoRAConfig, LoRAAdapter
 
-# 레지스트리 설정
 config = LoRAConfig(
     adapters_base_path="./lora_adapters",
     max_loaded_adapters=4,
@@ -285,63 +307,14 @@ config = LoRAConfig(
 )
 
 registry = LoRAAdapterRegistry(config)
-
-# 어댑터 등록
 registry.register(LoRAAdapter(
     name="tenant-a-adapter",
     path="./lora_adapters/tenant_a",
-    base_model="meta-llama/Llama-2-7b-hf",
-    rank=16,
-    alpha=32
+    base_model="meta-llama/Llama-2-7b-hf"
 ))
 
-# 테넌트 매핑
-registry.set_tenant_mapping(TenantLoRAMapping(
-    tenant_id="tenant-a",
-    adapter_name="tenant-a-adapter"
-))
-
-# 로더로 동적 로딩
 loader = LoRALoader(config, registry)
 adapter_name = await loader.get_for_tenant("tenant-a")
-```
-
-### Quantization
-
-```python
-from agentic_ai_serving.quantization import (
-    QuantizationConfig, QuantizationMethod, QLoRAConfig,
-    estimate_memory_usage, get_recommended_quantization
-)
-
-# 메모리 추정
-estimate = estimate_memory_usage(
-    model_params_billions=7.0,
-    quantization_method=QuantizationMethod.QLORA,
-    context_length=4096
-)
-print(f"예상 VRAM: {estimate.total_memory_gb}GB")
-
-# 추천 양자화
-method, bits, config = get_recommended_quantization(
-    model_params_billions=13.0,
-    available_vram_gb=24.0,
-    use_case="inference",
-    priority="speed"
-)
-
-# QLoRA 설정
-quant_config = QuantizationConfig(
-    method=QuantizationMethod.QLORA,
-    qlora=QLoRAConfig(
-        bits=4,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True
-    )
-)
-
-# transformers용 kwargs
-kwargs = quant_config.to_transformers_kwargs()
 ```
 
 ## Health Endpoints
@@ -349,6 +322,22 @@ kwargs = quant_config.to_transformers_kwargs()
 - `/health` - Liveness probe
 - `/readiness` - Readiness probe
 - `/startup` - Startup probe
+
+## Package Dependencies
+
+```
+core ─────────────────────────────────────────┐
+  ↑                                           │
+pipeline ──────────────────────────┐          │
+  ↑                                │          │
+agents ────────────────┐           │          │
+  ↑                    │           │          │
+knowledge ────┐        │           │          │
+  ↑           │        │           │          │
+decision      │        │           │          │
+              ↓        ↓           ↓          ↓
+           serving (optional, depends only on core)
+```
 
 ## Evaluation Metrics
 

@@ -1,5 +1,5 @@
 """
-Agentic AI Knowledge Package
+Agentic Knowledge Package
 
 지식 그래프 확장 모듈 - Entity, Relationship, Graph, Ontology
 
@@ -8,7 +8,7 @@ Agentic AI Knowledge Package
 - 지식 그래프 기반 검색이 필요한 경우
 - 온톨로지 기반 스키마 관리가 필요한 경우
 
-단순 RAG만 필요하면 agentic-ai-core만 사용하세요.
+단순 RAG만 필요하면 agentic-core만 사용하세요.
 """
 
 # Schema

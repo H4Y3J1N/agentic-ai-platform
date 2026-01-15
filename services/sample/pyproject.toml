@@ -7,10 +7,16 @@ packages = [{include = "sample_service"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-agentic-ai-core = {path = "../../packages/core", develop = true}
+
+# 필수 패키지
+agentic-core = {path = "../../packages/core", develop = true}
+agentic-pipeline = {path = "../../packages/pipeline", develop = true}
+agentic-agents = {path = "../../packages/agents", develop = true}
+
 # 선택적 패키지 - 필요시 주석 해제
-# agentic-ai-knowledge = {path = "../../packages/knowledge", develop = true}
-# agentic-ai-decision = {path = "../../packages/decision", develop = true}
+# agentic-knowledge = {path = "../../packages/knowledge", develop = true}  # 지식그래프
+# agentic-decision = {path = "../../packages/decision", develop = true}    # 의사결정 지원
+# agentic-serving = {path = "../../packages/serving", develop = true}      # 로컬 모델 서빙
 fastapi = "^0.100"
 uvicorn = "^0.23"
 pydantic = "^2.0"

@@ -1,18 +1,14 @@
 [tool.poetry]
-name = "agentic-decision"
+name = "agentic-pipeline"
 version = "0.1.0"
-description = "Decision support - scoring, lifecycle management"
+description = "Data processing pipeline - ingestion, query, scoring, evaluation"
 authors = ["Your Name <your.email@example.com>"]
-packages = [{include = "agentic_decision"}]
+packages = [{include = "agentic_pipeline"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
 agentic-core = {path = "../core", develop = true}
-agentic-knowledge = {path = "../knowledge", develop = true, optional = true}
 pydantic = "^2.0"
-
-[tool.poetry.extras]
-knowledge = ["agentic-knowledge"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"

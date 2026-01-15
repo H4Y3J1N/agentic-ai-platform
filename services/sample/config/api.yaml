@@ -8,7 +8,7 @@ api:
   cors:
     allow_origins:
       - "http://localhost:3000"
-      - "https://ecommerce.example.com"
+      - "https://sample.example.com"  # TODO: 도메인에 맞게 수정
     allow_methods: ["*"]
     allow_headers: ["*"]
     allow_credentials: true

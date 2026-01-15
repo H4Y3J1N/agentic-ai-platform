@@ -7,7 +7,7 @@ Sample Tool
 
 from typing import Any
 
-from agentic_ai_core.tools import BaseTool
+from agentic_agents.tools import BaseTool
 
 
 class SampleTool(BaseTool):

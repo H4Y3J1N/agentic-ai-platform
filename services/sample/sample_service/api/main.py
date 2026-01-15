@@ -1,6 +1,8 @@
 """
-E-commerce Agentic AI Service - FastAPI Application
-무중단 배포 지원 (Graceful Shutdown, Health Checks)
+Sample Agentic AI Service - FastAPI Application
+
+도메인별 서비스 템플릿입니다.
+새 서비스 생성 시 이 파일을 복사하여 도메인에 맞게 수정하세요.
 """
 
 from fastapi import FastAPI
@@ -11,9 +13,9 @@ import signal
 import asyncio
 
 app = FastAPI(
-    title="E-commerce Agentic AI Service",
-    description="무중단 배포 지원 - SSE, WebSocket, Rate Limiting",
-    version="1.0.0"
+    title="Sample Agentic AI Service",
+    description="도메인 서비스 템플릿 - SSE, WebSocket, Rate Limiting",
+    version="0.1.0"
 )
 
 # CORS
@@ -58,7 +60,7 @@ signal.signal(signal.SIGTERM, handle_sigterm)
 @app.on_event("startup")
 async def startup():
     """서비스 시작"""
-    print("🚀 E-commerce Agentic AI Service starting...")
+    print("🚀 Sample Agentic AI Service starting...")
     
     # 의존성 연결 (PostgreSQL, Redis, Milvus)
     await asyncio.sleep(1)  # 초기화 시뮬레이션
@@ -71,15 +73,15 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     """서비스 종료"""
-    print("👋 E-commerce Agentic AI Service shutting down...")
+    print("👋 Sample Agentic AI Service shutting down...")
 
 
 @app.get("/")
 async def root():
     """루트 엔드포인트"""
     return {
-        "service": "E-commerce Agentic AI",
-        "version": "1.0.0",
+        "service": "Sample Agentic AI",
+        "version": "0.1.0",
         "features": ["SSE", "WebSocket", "Rate Limiting", "Zero-Downtime Deployment"],
         "endpoints": {
             "chat": "/agent/chat",

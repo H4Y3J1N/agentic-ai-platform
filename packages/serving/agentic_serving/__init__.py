@@ -1,10 +1,10 @@
 """
-Agentic AI Serving Package
+Agentic Serving Package
 
 로컬 모델 서빙을 위한 패키지
-- vLLM: 고성능 LLM inference server
-- LoRA: 어댑터 관리 및 동적 로딩
-- Quantization: QLoRA, EXL2, GPTQ 등 양자화 지원
+- vllm: 고성능 LLM inference server
+- lora: 어댑터 관리 및 동적 로딩
+- quantization: QLoRA, EXL2, GPTQ 등 양자화 지원
 """
 
 from .vllm import VLLMProvider, VLLMConfig

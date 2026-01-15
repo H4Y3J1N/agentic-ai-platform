@@ -3,7 +3,7 @@ Rate Limiting Middleware
 """
 
 from fastapi import Request, HTTPException
-from agentic_ai_core.security.rate_limiting.token_bucket import TokenBucket
+from agentic_core.security import TokenBucket
 from starlette.middleware.base import BaseHTTPMiddleware
 import time
 

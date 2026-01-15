@@ -1,5 +1,5 @@
 """
-Agentic AI Decision Package
+Agentic Decision Package
 
 의사결정 지원 확장 모듈 - Decision Types, Decision Scoring, Lifecycle Management
 
@@ -8,7 +8,7 @@ Agentic AI Decision Package
 - 문서의 의사결정 관련성을 스코어링할 때
 - 데이터 생명주기 관리가 필요한 경우
 
-단순 RAG/지식그래프만 필요하면 agentic-ai-core + agentic-ai-knowledge를 사용하세요.
+단순 RAG/지식그래프만 필요하면 agentic-core + agentic-knowledge를 사용하세요.
 """
 
 # Schema

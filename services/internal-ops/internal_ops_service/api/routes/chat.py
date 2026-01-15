@@ -3,7 +3,7 @@ Chat Routes - SSE 스트리밍 지원
 """
 
 from fastapi import APIRouter, Depends, Query
-from agentic_ai_core.api.sse_response import SSEResponse
+from agentic_core.api import SSEResponse
 from ..dependencies import get_agent_executor, get_current_user
 import json
 
@@ -17,7 +17,7 @@ async def chat(
     user = Depends(get_current_user)
 ):
     """일반 채팅 (비스트리밍)"""
-    context = {"user_id": user.id, "domain": "ecommerce"}
+    context = {"user_id": user.id, "domain": "internal-ops"}
     result = await executor.execute(task, context)
     return {"result": result, "user_id": user.id}
 
@@ -30,7 +30,7 @@ async def stream_chat(
 ):
     """SSE 기반 스트리밍 채팅"""
     
-    context = {"user_id": user.id, "domain": "ecommerce"}
+    context = {"user_id": user.id, "domain": "internal-ops"}
     
     async def generate():
         # 시작 이벤트

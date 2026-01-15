@@ -7,7 +7,7 @@ Sample Agent
 
 from typing import Any
 
-from agentic_ai_core.agents import BaseAgent
+from agentic_agents.base import BaseAgent
 
 
 class SampleAgent(BaseAgent):

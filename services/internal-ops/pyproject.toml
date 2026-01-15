@@ -7,8 +7,12 @@ packages = [{include = "internal_ops_service"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-agentic-ai-core = {path = "../../packages/core", develop = true}
-agentic-ai-knowledge = {path = "../../packages/knowledge", develop = true}
+
+# 필수 패키지
+agentic-core = {path = "../../packages/core", develop = true}
+agentic-pipeline = {path = "../../packages/pipeline", develop = true}
+agentic-agents = {path = "../../packages/agents", develop = true}
+agentic-knowledge = {path = "../../packages/knowledge", develop = true}
 fastapi = "^0.100"
 uvicorn = "^0.23"
 pydantic = "^2.0"

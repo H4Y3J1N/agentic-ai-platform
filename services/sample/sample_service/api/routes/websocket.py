@@ -3,7 +3,7 @@ WebSocket Routes
 """
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from agentic_ai_core.api.websocket_manager import WebSocketManager
+from agentic_core.api import WebSocketManager
 import json
 
 router = APIRouter(tags=["websocket"])
