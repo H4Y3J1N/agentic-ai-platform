@@ -291,7 +291,3 @@ adapter_name = await loader.get_for_tenant("tenant-a")
 ## 라이선스
 
 이 프로젝트는 MIT 라이선스를 따릅니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
-
-## 기여
-
-기여를 환영합니다! Pull Request를 자유롭게 제출해 주세요.
