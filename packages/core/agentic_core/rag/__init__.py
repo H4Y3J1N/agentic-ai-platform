@@ -35,6 +35,7 @@ from .embedder import (
     OpenAIEmbedder,
     OllamaEmbedder,
     SentenceTransformersEmbedder,
+    GeminiEmbedder,
     create_embedder,
 )
 
@@ -54,6 +55,51 @@ from .indexer import (
     IndexingResult,
     IndexingStatus,
     IncrementalIndexer,
+)
+
+# Reranker
+from .reranker import (
+    Reranker,
+    RerankerConfig,
+    RerankerModel,
+    RerankResult,
+    CrossEncoderReranker,
+    BGEReranker,
+    create_reranker,
+)
+
+# Query Processor
+from .query_processor import (
+    QueryProcessor,
+    QueryProcessorConfig,
+    ProcessedQuery,
+    LLMQueryRewriter,
+    MultiQueryDecomposer,
+    CompositeQueryProcessor,
+    create_query_processor,
+)
+
+# Hybrid Search
+from .hybrid_search import (
+    HybridSearchConfig,
+    HybridSearchResult,
+    BM25Index,
+    HybridSearcher,
+    create_hybrid_searcher,
+)
+
+# RAG Strategies
+from .strategies import (
+    RAGStrategy,
+    RAGStrategyType,
+    RAGStrategyConfig,
+    RAGResult,
+    RetrievalQuality,
+    SingleShotRAG,
+    CorrectiveRAG,
+    SelfRAG,
+    create_rag_strategy,
+    get_available_strategies,
 )
 
 
@@ -82,6 +128,7 @@ __all__ = [
     "OpenAIEmbedder",
     "OllamaEmbedder",
     "SentenceTransformersEmbedder",
+    "GeminiEmbedder",
     "create_embedder",
     # Retriever
     "Retriever",
@@ -95,4 +142,37 @@ __all__ = [
     "IndexingResult",
     "IndexingStatus",
     "IncrementalIndexer",
+    # Reranker
+    "Reranker",
+    "RerankerConfig",
+    "RerankerModel",
+    "RerankResult",
+    "CrossEncoderReranker",
+    "BGEReranker",
+    "create_reranker",
+    # Query Processor
+    "QueryProcessor",
+    "QueryProcessorConfig",
+    "ProcessedQuery",
+    "LLMQueryRewriter",
+    "MultiQueryDecomposer",
+    "CompositeQueryProcessor",
+    "create_query_processor",
+    # Hybrid Search
+    "HybridSearchConfig",
+    "HybridSearchResult",
+    "BM25Index",
+    "HybridSearcher",
+    "create_hybrid_searcher",
+    # RAG Strategies
+    "RAGStrategy",
+    "RAGStrategyType",
+    "RAGStrategyConfig",
+    "RAGResult",
+    "RetrievalQuality",
+    "SingleShotRAG",
+    "CorrectiveRAG",
+    "SelfRAG",
+    "create_rag_strategy",
+    "get_available_strategies",
 ]

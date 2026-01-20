@@ -13,12 +13,30 @@ agentic-core = {path = "../../packages/core", develop = true}
 agentic-pipeline = {path = "../../packages/pipeline", develop = true}
 agentic-agents = {path = "../../packages/agents", develop = true}
 agentic-knowledge = {path = "../../packages/knowledge", develop = true}
+agentic-chat-ui = {path = "../../packages/chat-ui", develop = true}
 fastapi = "^0.100"
 uvicorn = "^0.23"
 pydantic = "^2.0"
 pydantic-settings = "^2.0"
 httpx = "^0.25"
 pyyaml = "^6.0"
+
+# RAG & LLM
+chromadb = "^0.4"
+openai = "^1.0"
+litellm = "^1.40"  # Unified LLM Gateway (Gemini, OpenAI, etc.)
+google-generativeai = "^0.8"  # Google Gemini Embeddings
+sentence-transformers = "^3.0"  # Cross-encoder Reranking
+
+# Slack Integration
+slack-sdk = "^3.21"
+
+# Observability
+langfuse = "^2.0"
+
+# Chat UI
+streamlit = "^1.30"
+httpx-sse = "^0.4"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4"

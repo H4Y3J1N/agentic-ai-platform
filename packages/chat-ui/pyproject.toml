@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "agentic-chat-ui"
+version = "0.1.0"
+description = "Reusable chat UI components with Streamlit and SSE support"
+authors = ["Your Name <your.email@example.com>"]
+packages = [{include = "agentic_chat_ui"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+streamlit = "^1.30"
+httpx = "^0.25"
+httpx-sse = "^0.4"
+pydantic = "^2.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

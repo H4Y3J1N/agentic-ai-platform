@@ -22,6 +22,14 @@ class EmbeddingModel(str, Enum):
     OPENAI_3_SMALL = "text-embedding-3-small"
     OPENAI_3_LARGE = "text-embedding-3-large"
 
+    # Google Gemini
+    GEMINI_EMBEDDING = "models/text-embedding-004"
+    GEMINI_EMBEDDING_EXP = "models/gemini-embedding-exp-03-07"
+
+    # Google Vertex AI
+    VERTEX_GECKO = "textembedding-gecko@003"
+    VERTEX_GECKO_MULTILINGUAL = "textembedding-gecko-multilingual@001"
+
     # Local / Open Source
     SENTENCE_TRANSFORMERS = "sentence-transformers"
     BGE_SMALL = "BAAI/bge-small-en-v1.5"
@@ -331,19 +339,164 @@ class SentenceTransformersEmbedder(Embedder):
         ]
 
 
+class GeminiEmbedder(Embedder):
+    """Google Gemini 임베딩"""
+
+    DIMENSION_MAP = {
+        "models/text-embedding-004": 768,
+        "models/gemini-embedding-exp-03-07": 3072,
+    }
+
+    def __init__(
+        self,
+        config: Optional[EmbedderConfig] = None,
+        api_key: Optional[str] = None
+    ):
+        super().__init__(config)
+        self.api_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        self._client = None
+
+    def _ensure_client(self):
+        """Gemini 클라이언트 초기화 (lazy loading)"""
+        if self._client is None:
+            try:
+                import google.generativeai as genai
+            except ImportError:
+                raise ImportError(
+                    "google-generativeai is required. "
+                    "Install with: pip install google-generativeai"
+                )
+
+            if not self.api_key:
+                raise ValueError(
+                    "GEMINI_API_KEY or GOOGLE_API_KEY environment variable is required"
+                )
+
+            genai.configure(api_key=self.api_key)
+            self._client = genai
+            logger.info(f"Gemini embedder initialized: model={self.config.model}")
+
+    @property
+    def dimensions(self) -> int:
+        if self.config.dimensions:
+            return self.config.dimensions
+        return self.DIMENSION_MAP.get(self.config.model, 768)
+
+    @property
+    def model_name(self) -> str:
+        return self.config.model
+
+    async def embed(self, text: str) -> EmbeddingResult:
+        """단일 텍스트 임베딩"""
+        self._ensure_client()
+
+        # google-generativeai는 동기식이므로 별도 스레드에서 실행
+        loop = asyncio.get_event_loop()
+
+        def _embed():
+            result = self._client.embed_content(
+                model=self.config.model,
+                content=text,
+                task_type="retrieval_document"
+            )
+            return result["embedding"]
+
+        embedding = await loop.run_in_executor(None, _embed)
+
+        return EmbeddingResult(
+            embedding=embedding,
+            model=self.config.model,
+            dimensions=len(embedding)
+        )
+
+    async def embed_batch(self, texts: List[str]) -> List[EmbeddingResult]:
+        """배치 텍스트 임베딩"""
+        self._ensure_client()
+
+        loop = asyncio.get_event_loop()
+
+        def _embed_batch():
+            # Gemini supports batch embedding
+            results = []
+            for text in texts:
+                result = self._client.embed_content(
+                    model=self.config.model,
+                    content=text,
+                    task_type="retrieval_document"
+                )
+                results.append(result["embedding"])
+            return results
+
+        embeddings = await loop.run_in_executor(None, _embed_batch)
+
+        return [
+            EmbeddingResult(
+                embedding=emb,
+                model=self.config.model,
+                dimensions=len(emb)
+            )
+            for emb in embeddings
+        ]
+
+    async def embed_query(self, text: str) -> EmbeddingResult:
+        """쿼리용 임베딩 (retrieval_query task type)"""
+        self._ensure_client()
+
+        loop = asyncio.get_event_loop()
+
+        def _embed():
+            result = self._client.embed_content(
+                model=self.config.model,
+                content=text,
+                task_type="retrieval_query"
+            )
+            return result["embedding"]
+
+        embedding = await loop.run_in_executor(None, _embed)
+
+        return EmbeddingResult(
+            embedding=embedding,
+            model=self.config.model,
+            dimensions=len(embedding)
+        )
+
+
 def create_embedder(
-    model: str = EmbeddingModel.OPENAI_3_SMALL.value,
+    model: str = EmbeddingModel.GEMINI_EMBEDDING.value,
     **kwargs
 ) -> Embedder:
-    """임베더 팩토리 함수"""
+    """
+    임베더 팩토리 함수
+
+    Args:
+        model: 임베딩 모델 이름
+            - Gemini: "models/text-embedding-004" (기본값)
+            - OpenAI: "text-embedding-3-small", "text-embedding-3-large"
+            - Ollama: "nomic-embed-text", "mxbai-embed-large"
+            - Local: "sentence-transformers", "BAAI/bge-small-en-v1.5"
+        **kwargs: 추가 설정 (api_key, host 등)
+
+    Returns:
+        Embedder 인스턴스
+    """
     config = EmbedderConfig(model=model, **{k: v for k, v in kwargs.items() if k in EmbedderConfig.__dataclass_fields__})
 
+    # Google Gemini
+    if model.startswith("models/") and ("embedding" in model or "gemini" in model):
+        return GeminiEmbedder(config, api_key=kwargs.get("api_key"))
+
+    # OpenAI
     if model.startswith("text-embedding"):
         return OpenAIEmbedder(config, api_key=kwargs.get("api_key"))
-    elif model in ["nomic-embed-text", "mxbai-embed-large"]:
+
+    # Ollama
+    if model in ["nomic-embed-text", "mxbai-embed-large"]:
         return OllamaEmbedder(config, host=kwargs.get("host"))
-    elif model == "sentence-transformers" or "/" in model:
+
+    # Sentence Transformers (local)
+    if model == "sentence-transformers" or "BAAI/" in model or "bge-" in model:
         return SentenceTransformersEmbedder(config, model_name=model)
-    else:
-        # 기본: OpenAI
-        return OpenAIEmbedder(config, api_key=kwargs.get("api_key"))
+
+    # 기본: Gemini
+    logger.info(f"Unknown model '{model}', defaulting to Gemini embedder")
+    return GeminiEmbedder(config, api_key=kwargs.get("api_key"))

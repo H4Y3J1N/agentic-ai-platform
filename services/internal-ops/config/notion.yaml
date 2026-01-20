@@ -5,6 +5,18 @@ notion:
   api_key: "${NOTION_API_KEY}"
   api_version: "2022-06-28"
 
+  # Database IDs for Internal Ops
+  databases:
+    project: "d88921b8328f48f0b1b07267afffe193"  # Project DB (나라별 프로젝트)
+    task: "${NOTION_TASK_DB_ID}"                 # Task DB (하위 태스크)
+    meeting: "${NOTION_MEETING_DB_ID}"           # Meeting DB (관련 미팅)
+    country: "${NOTION_COUNTRY_DB_ID}"           # Country DB (담당 국가)
+
+  # Task Creation Settings
+  task_creation:
+    task_title_property: "이름"                  # Task DB의 제목 속성명
+    task_project_relation_property: "프로젝트"   # Task DB에서 Project를 가리키는 Relation 속성명
+
   # Sync Configuration
   sync:
     # Schedule (cron format)

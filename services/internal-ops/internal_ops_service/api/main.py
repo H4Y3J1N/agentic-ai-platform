@@ -5,7 +5,7 @@ Notion RAG 검색 및 내부 지식 관리
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routes import chat, websocket, health, knowledge
+from .routes import chat, websocket, health, knowledge, tasks
 from .middleware.rate_limit_middleware import RateLimitMiddleware
 import signal
 import asyncio
@@ -33,6 +33,7 @@ app.include_router(chat.router)
 app.include_router(websocket.router)
 app.include_router(health.router)
 app.include_router(knowledge.router)
+app.include_router(tasks.router)
 
 
 # Graceful Shutdown 핸들러
@@ -81,6 +82,7 @@ async def root():
         "features": [
             "Notion RAG Search",
             "Knowledge Q&A",
+            "Task Creation",
             "SSE Streaming",
             "WebSocket"
         ],
@@ -88,6 +90,8 @@ async def root():
             "knowledge_search": "/knowledge/search",
             "knowledge_ask": "/knowledge/ask",
             "knowledge_page": "/knowledge/page/{page_id}",
+            "tasks_create": "/tasks/create",
+            "tasks_projects": "/tasks/projects",
             "chat": "/agent/chat",
             "stream": "/agent/chat/stream",
             "websocket": "/ws/chat/{session_id}",

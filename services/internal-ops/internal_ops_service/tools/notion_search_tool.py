@@ -4,26 +4,44 @@ Notion Search Tool - RAG-based semantic search over Notion content
 
 from typing import List, Dict, Any, Optional
 import os
+import sys
 import logging
+from pathlib import Path
+
+# Add core package to path for imports
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "packages" / "core"))
+
+from agentic_core.rag import EmbeddingModel, create_embedder
+from agentic_core.tools import BaseTool, ToolResult, ToolConfig, ToolCapability, tool
 
 logger = logging.getLogger(__name__)
 
+# Default embedding model - Google Gemini
+DEFAULT_EMBEDDING_MODEL = EmbeddingModel.GEMINI_EMBEDDING.value
 
-class NotionSearchTool:
+
+@tool(
+    name="notion_search",
+    description="Search internal Notion documentation using natural language",
+    capabilities=[ToolCapability.SEARCH, ToolCapability.RETRIEVE],
+    tags=["notion", "search", "rag"]
+)
+class NotionSearchTool(BaseTool):
     """RAG-based semantic search over Notion content"""
 
-    def __init__(self, config: dict = None):
-        self.config = config or {}
-        self.name = "NotionSearchTool"
-        self.description = "Search internal Notion documentation using natural language"
+    def __init__(self, config: Optional[ToolConfig] = None, **kwargs):
+        super().__init__(config)
+        # Support legacy dict config
+        self._extra_config = kwargs.get("legacy_config", {})
 
         self._chroma_client = None
         self._collection = None
-        self._openai_client = None
+        self._embedder = None
 
-    async def _ensure_initialized(self):
-        """Lazy initialization of ChromaDB and OpenAI"""
-        if self._collection is not None:
+    async def initialize(self):
+        """Lazy initialization of ChromaDB and Gemini Embedder"""
+        if self._initialized:
             return
 
         try:
@@ -32,8 +50,8 @@ class NotionSearchTool:
         except ImportError:
             raise ImportError("chromadb is required")
 
-        persist_dir = self.config.get("persist_dir", os.environ.get("CHROMA_PERSIST_DIR", "./data/chroma"))
-        collection_name = self.config.get("collection_name", "internal_ops_notion")
+        persist_dir = self._extra_config.get("persist_dir", os.environ.get("CHROMA_PERSIST_DIR", "./data/chroma"))
+        collection_name = self._extra_config.get("collection_name", "internal_ops_notion")
 
         self._chroma_client = chromadb.PersistentClient(
             path=persist_dir,
@@ -45,29 +63,47 @@ class NotionSearchTool:
             metadata={"hnsw:space": "cosine"}
         )
 
-        logger.info(f"NotionSearchTool initialized with collection '{collection_name}'")
+        # Initialize Gemini Embedder
+        embedding_model = self._extra_config.get("embedding_model", DEFAULT_EMBEDDING_MODEL)
+        self._embedder = create_embedder(model=embedding_model)
+
+        self._initialized = True
+        logger.info(f"NotionSearchTool initialized with collection '{collection_name}', embedder: {embedding_model}")
+
+    async def execute(self, **kwargs) -> ToolResult:
+        """
+        Execute search (BaseTool interface).
+
+        Args:
+            query: Search query string
+            top_k: Number of results (default: 5)
+            filters: Optional filters dict
+
+        Returns:
+            ToolResult with search results
+        """
+        query = kwargs.get("query", "")
+        top_k = kwargs.get("top_k", 5)
+        filters = kwargs.get("filters")
+
+        if not query:
+            return ToolResult.fail("Query is required")
+
+        try:
+            results = await self.search(query=query, top_k=top_k, filters=filters)
+            return ToolResult.ok(results, count=len(results))
+        except Exception as e:
+            return ToolResult.fail(str(e))
 
     async def _get_embedding(self, text: str) -> List[float]:
-        """Get embedding for query text"""
-        try:
-            import openai
-        except ImportError:
-            raise ImportError("openai is required")
+        """Get embedding for query text using Gemini Embedder"""
+        # Use embed_query for retrieval queries (different task type than document embedding)
+        if hasattr(self._embedder, 'embed_query'):
+            result = await self._embedder.embed_query(text)
+        else:
+            result = await self._embedder.embed(text)
 
-        if self._openai_client is None:
-            api_key = os.environ.get("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY environment variable required")
-            self._openai_client = openai.OpenAI(api_key=api_key)
-
-        model = self.config.get("embedding_model", "text-embedding-3-small")
-
-        response = self._openai_client.embeddings.create(
-            model=model,
-            input=[text]
-        )
-
-        return response.data[0].embedding
+        return result.embedding
 
     async def search(
         self,
@@ -86,7 +122,7 @@ class NotionSearchTool:
         Returns:
             List of matching documents with content and metadata
         """
-        await self._ensure_initialized()
+        await self.initialize()
 
         # Get query embedding
         query_embedding = await self._get_embedding(query)
@@ -159,7 +195,7 @@ class NotionSearchTool:
 
     async def get_collection_stats(self) -> Dict[str, Any]:
         """Get statistics about the indexed collection"""
-        await self._ensure_initialized()
+        await self.initialize()
 
         return {
             "collection_name": self._collection.name,

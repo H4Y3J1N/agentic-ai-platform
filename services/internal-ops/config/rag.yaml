@@ -1,14 +1,28 @@
 # RAG (Retrieval-Augmented Generation) Configuration
+# This is the single source of truth for all RAG settings
 
 rag:
+  # LLM Configuration
+  llm:
+    # Default model (via LiteLLM)
+    # Gemini: gemini/gemini-1.5-flash, gemini/gemini-1.5-pro
+    # OpenAI: gpt-4o-mini, gpt-4o
+    # Claude: claude-3-5-sonnet-20241022
+    model: "${LLM_MODEL:gemini/gemini-1.5-flash}"
+    temperature: 0.3
+    max_tokens: 4096
+    timeout: 60
+
   # Embedding Configuration
   embedding:
-    provider: "openai"
-    model: "text-embedding-3-small"
-    dimension: 1536
-    # Alternative: Local embedding (for cost savings)
-    # provider: "local"
-    # model: "BAAI/bge-m3"
+    provider: "gemini"
+    model: "models/text-embedding-004"
+    dimension: 768
+    batch_size: 100
+    # Alternative: OpenAI
+    # provider: "openai"
+    # model: "text-embedding-3-small"
+    # dimension: 1536
 
   # Vector Store
   vector_store:
@@ -19,21 +33,48 @@ rag:
 
   # Chunking Strategy
   chunking:
-    strategy: "notion_aware"
+    strategy: "recursive"  # recursive, semantic, fixed_size
     chunk_size: 500
     chunk_overlap: 50
+    min_chunk_size: 100
+    max_chunk_size: 1000
+    respect_sentence_boundary: true
     preserve_headers: true
     preserve_code_blocks: true
-    min_chunk_size: 100
 
   # Retrieval Settings
   retrieval:
     default_top_k: 5
     max_top_k: 20
-    reranking_enabled: false
     min_relevance_score: 0.3
+
+    # Hybrid Search (BM25 + Semantic with RRF)
+    hybrid_search:
+      enabled: true
+      semantic_weight: 0.7      # Weight for semantic search (0-1)
+      keyword_weight: 0.3       # Weight for BM25 keyword search (0-1)
+      rrf_k: 60                 # RRF constant (default 60)
+
+    # Reranking with Cross-Encoder
+    reranking:
+      enabled: true
+      model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+      top_n: 5                  # Number of results after reranking
+      batch_size: 32
+      # Alternative models:
+      # - cross-encoder/ms-marco-TinyBERT-L-2-v2 (faster, less accurate)
+      # - cross-encoder/ms-marco-MiniLM-L-12-v2 (more accurate, slower)
 
   # Query Processing
   query:
-    rewriting_enabled: true
-    expansion_enabled: false
+    # Query Rewriting (using LLM)
+    rewriting:
+      enabled: true
+      model: "${LLM_MODEL:gemini/gemini-1.5-flash}"
+      max_rewrites: 3           # Generate multiple query variations
+      include_original: true    # Also search with original query
+
+    # Query Expansion (not yet implemented)
+    expansion:
+      enabled: false
+      method: "synonyms"        # synonyms, llm, hybrid

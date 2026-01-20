@@ -217,17 +217,44 @@ class NotionClient:
         parent_id: str,
         parent_type: str,
         title: str,
-        content_blocks: List[Dict]
+        properties: Optional[Dict[str, Any]] = None,
+        content_blocks: Optional[List[Dict]] = None,
+        title_property_name: str = "title"
     ) -> NotionPage:
-        """Create a new page (Post-MVP)"""
+        """
+        Create a new page in Notion.
+
+        Args:
+            parent_id: Database ID or Page ID
+            parent_type: "database_id" or "page_id"
+            title: Page title
+            properties: Additional properties (relations, selects, etc.)
+            content_blocks: Page content blocks
+            title_property_name: Name of the title property (default "title",
+                               but some DBs use different names like "이름" or "제목")
+
+        Returns:
+            Created NotionPage
+        """
         parent_id = self._normalize_id(parent_id)
-        payload = {
-            "parent": {parent_type: parent_id},
-            "properties": {
-                "title": {"title": [{"text": {"content": title}}]}
-            },
-            "children": content_blocks
+
+        # Build properties dict with title
+        page_properties = {
+            title_property_name: {"title": [{"text": {"content": title}}]}
         }
+
+        # Merge additional properties
+        if properties:
+            page_properties.update(properties)
+
+        payload: Dict[str, Any] = {
+            "parent": {parent_type: parent_id},
+            "properties": page_properties
+        }
+
+        if content_blocks:
+            payload["children"] = content_blocks
+
         data = await self._request("POST", "/pages", json=payload)
         return NotionPage.from_api_response(data)
 

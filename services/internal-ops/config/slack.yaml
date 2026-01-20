@@ -1,0 +1,37 @@
+# Slack Integration Configuration
+
+slack:
+  # API Tokens (from environment variables)
+  bot_token: "${SLACK_BOT_TOKEN}"
+  user_token: "${SLACK_USER_TOKEN}"  # Optional, for search.messages
+
+  # Workspace Information
+  workspace_url: "${SLACK_WORKSPACE_URL}"  # e.g., https://yourworkspace.slack.com
+
+  # Sync Configuration
+  sync:
+    # Channel filters
+    include_private: true
+    include_archived: false
+    channel_whitelist: []  # Empty = sync all accessible channels
+    channel_blacklist: []  # Channel names or IDs to exclude
+
+    # Content filters
+    include_threads: true
+    exclude_bot_messages: false
+
+    # Limits
+    max_messages_per_channel: 10000
+    lookback_days: 90
+    batch_size: 100
+
+  # Rate Limiting (Slack API limits - Tier 3)
+  rate_limit:
+    requests_per_minute: 50
+    burst: 20
+    retry_after_seconds: 60
+
+  # Vector Store (embedding settings are in rag.yaml)
+  vector_store:
+    collection_name: "internal_ops_slack"
+    # Note: embedding_model is configured in rag.yaml for consistency

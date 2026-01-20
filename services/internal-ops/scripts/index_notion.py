@@ -25,6 +25,16 @@ sys.path.insert(0, str(PROJECT_ROOT / "packages" / "core"))
 
 import yaml
 
+# Import core embedder and chunker
+from agentic_core.rag import (
+    EmbeddingModel,
+    create_embedder,
+    RecursiveChunker,
+    ChunkerConfig,
+    TextChunk,
+)
+from typing import List, Dict, Any, Tuple
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -47,6 +57,23 @@ class NotionIndexer:
         self.sync_manager = None
         self.chroma_client = None
         self.collection = None
+
+        # Initialize chunker from core package
+        chunking_config = self.rag_config.get("rag", {}).get("chunking", {})
+        self.chunker = RecursiveChunker(ChunkerConfig(
+            chunk_size=chunking_config.get("chunk_size", 500),
+            chunk_overlap=chunking_config.get("chunk_overlap", 50),
+            min_chunk_size=chunking_config.get("min_chunk_size", 100),
+            max_chunk_size=chunking_config.get("max_chunk_size", 1000),
+            respect_sentence_boundary=True
+        ))
+        logger.info(f"Initialized RecursiveChunker with chunk_size={self.chunker.config.chunk_size}")
+
+        # Initialize embedder from core package (Google Gemini by default)
+        embedding_config = self.rag_config.get("rag", {}).get("embedding", {})
+        embedding_model = embedding_config.get("model", EmbeddingModel.GEMINI_EMBEDDING.value)
+        self.embedder = create_embedder(model=embedding_model)
+        logger.info(f"Initialized Embedder: {embedding_model}")
 
     def _load_config(self, filename: str) -> dict:
         """Load configuration from YAML"""
@@ -150,65 +177,65 @@ class NotionIndexer:
                    f"Current count: {self.collection.count()}")
 
     async def _get_embeddings(self, texts: list) -> list:
-        """Get embeddings for texts using OpenAI"""
-        try:
-            import openai
-        except ImportError:
-            raise ImportError(
-                "openai is required. Install with: pip install openai"
-            )
+        """Get embeddings for texts using core embedder (Gemini by default)"""
+        if not texts:
+            return []
 
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
+        # Use batch embedding from core embedder
+        results = await self.embedder.embed_batch(texts)
+        return [result.embedding for result in results]
 
-        client = openai.OpenAI(api_key=api_key)
+    def _chunk_documents(
+        self,
+        ids: List[str],
+        documents: List[str],
+        metadatas: List[Dict[str, Any]]
+    ) -> Tuple[List[str], List[str], List[Dict[str, Any]]]:
+        """
+        Chunk documents using core RecursiveChunker.
 
-        embedding_config = self.rag_config.get("rag", {}).get("embedding", {})
-        model = embedding_config.get("model", "text-embedding-3-small")
+        Long documents are split into smaller chunks while preserving metadata.
+        Short documents are kept as-is.
+        """
+        chunked_ids = []
+        chunked_docs = []
+        chunked_metas = []
 
-        # Batch embeddings (OpenAI allows up to 2048 texts per request)
-        all_embeddings = []
-        batch_size = 100
+        for doc_id, content, meta in zip(ids, documents, metadatas):
+            # Skip empty content
+            if not content or not content.strip():
+                continue
 
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
-            response = client.embeddings.create(
-                model=model,
-                input=batch
-            )
-            batch_embeddings = [e.embedding for e in response.data]
-            all_embeddings.extend(batch_embeddings)
+            # Skip short content (no need to chunk)
+            if len(content) <= self.chunker.config.max_chunk_size:
+                chunked_ids.append(doc_id)
+                chunked_docs.append(content)
+                chunked_metas.append(meta)
+                continue
 
-        return all_embeddings
+            # Chunk long content using RecursiveChunker
+            chunks: List[TextChunk] = self.chunker.chunk(content)
 
-    def _chunk_text(self, text: str, metadata: dict) -> list:
-        """Chunk text into smaller pieces"""
-        chunk_config = self.rag_config.get("rag", {}).get("chunking", {})
-        chunk_size = chunk_config.get("chunk_size", 500)
-        chunk_overlap = chunk_config.get("chunk_overlap", 50)
-
-        chunks = []
-
-        if len(text) <= chunk_size:
-            chunks.append({"text": text, "metadata": metadata})
-        else:
-            start = 0
-            chunk_index = 0
-            while start < len(text):
-                end = start + chunk_size
-                chunk_text = text[start:end]
-
-                chunk_metadata = {
-                    **metadata,
-                    "chunk_index": chunk_index
+            for i, chunk in enumerate(chunks):
+                chunk_id = f"{doc_id}_chunk_{i}"
+                chunk_meta = {
+                    **meta,
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                    "parent_id": doc_id,
+                    "start_char": chunk.metadata.start_char,
+                    "end_char": chunk.metadata.end_char,
                 }
-                chunks.append({"text": chunk_text, "metadata": chunk_metadata})
+                chunked_ids.append(chunk_id)
+                chunked_docs.append(chunk.content)
+                chunked_metas.append(chunk_meta)
 
-                start = end - chunk_overlap
-                chunk_index += 1
+        if len(chunked_docs) > len(documents):
+            logger.info(
+                f"Chunking: {len(documents)} documents -> {len(chunked_docs)} chunks"
+            )
 
-        return chunks
+        return chunked_ids, chunked_docs, chunked_metas
 
     async def full_sync(self):
         """Run full workspace sync"""
@@ -217,20 +244,15 @@ class NotionIndexer:
         documents = []
         metadatas = []
         ids = []
-
         doc_count = 0
+
         async for doc in self.sync_manager.sync_all():
-            # Chunk the document
-            chunks = self._chunk_text(doc.content, doc.metadata)
+            documents.append(doc.content)
+            metadatas.append(doc.metadata)
+            ids.append(doc.id)
+            doc_count += 1
 
-            for i, chunk in enumerate(chunks):
-                doc_id = f"{doc.id}_{i}"
-                documents.append(chunk["text"])
-                metadatas.append(chunk["metadata"])
-                ids.append(doc_id)
-                doc_count += 1
-
-            # Batch index every 50 chunks
+            # Batch index every 50 documents
             if len(documents) >= 50:
                 await self._index_batch(ids, documents, metadatas)
                 documents = []
@@ -242,7 +264,7 @@ class NotionIndexer:
             await self._index_batch(ids, documents, metadatas)
 
         self._save_last_sync()
-        logger.info(f"Full sync completed. Indexed {doc_count} chunks.")
+        logger.info(f"Full sync completed. Indexed {doc_count} documents.")
 
     async def incremental_sync(self):
         """Sync changes since last sync"""
@@ -255,14 +277,10 @@ class NotionIndexer:
         doc_count = 0
 
         async for doc in self.sync_manager.sync_incremental(since=last_sync):
-            chunks = self._chunk_text(doc.content, doc.metadata)
-
-            for i, chunk in enumerate(chunks):
-                doc_id = f"{doc.id}_{i}"
-                documents.append(chunk["text"])
-                metadatas.append(chunk["metadata"])
-                ids.append(doc_id)
-                doc_count += 1
+            documents.append(doc.content)
+            metadatas.append(doc.metadata)
+            ids.append(doc.id)
+            doc_count += 1
 
             if len(documents) >= 50:
                 await self._index_batch(ids, documents, metadatas)
@@ -274,7 +292,7 @@ class NotionIndexer:
             await self._index_batch(ids, documents, metadatas)
 
         self._save_last_sync()
-        logger.info(f"Incremental sync completed. Updated {doc_count} chunks.")
+        logger.info(f"Incremental sync completed. Updated {doc_count} documents.")
 
     async def sync_pages(self, page_ids: list):
         """Sync specific pages"""
@@ -286,37 +304,41 @@ class NotionIndexer:
         doc_count = 0
 
         async for doc in self.sync_manager.sync_pages(page_ids):
-            chunks = self._chunk_text(doc.content, doc.metadata)
-
-            for i, chunk in enumerate(chunks):
-                doc_id = f"{doc.id}_{i}"
-                documents.append(chunk["text"])
-                metadatas.append(chunk["metadata"])
-                ids.append(doc_id)
-                doc_count += 1
+            documents.append(doc.content)
+            metadatas.append(doc.metadata)
+            ids.append(doc.id)
+            doc_count += 1
 
         if documents:
             await self._index_batch(ids, documents, metadatas)
 
-        logger.info(f"Synced {doc_count} chunks from {len(page_ids)} pages.")
+        logger.info(f"Synced {doc_count} documents from {len(page_ids)} pages.")
 
     async def _index_batch(self, ids: list, documents: list, metadatas: list):
-        """Index a batch of documents into ChromaDB"""
+        """Index a batch of documents into ChromaDB with chunking"""
         if not documents:
             return
 
-        logger.info(f"Generating embeddings for {len(documents)} chunks...")
-        embeddings = await self._get_embeddings(documents)
+        # Apply chunking using core RecursiveChunker
+        chunked_ids, chunked_docs, chunked_metas = self._chunk_documents(
+            ids, documents, metadatas
+        )
+
+        if not chunked_docs:
+            return
+
+        logger.info(f"Generating embeddings for {len(chunked_docs)} chunks...")
+        embeddings = await self._get_embeddings(chunked_docs)
 
         # Upsert to ChromaDB
         self.collection.upsert(
-            ids=ids,
-            documents=documents,
+            ids=chunked_ids,
+            documents=chunked_docs,
             embeddings=embeddings,
-            metadatas=metadatas
+            metadatas=chunked_metas
         )
 
-        logger.info(f"Indexed {len(documents)} chunks. "
+        logger.info(f"Indexed {len(chunked_docs)} chunks from {len(documents)} documents. "
                    f"Total in collection: {self.collection.count()}")
 
     def _save_last_sync(self):
@@ -372,7 +394,8 @@ Examples:
 
 Environment Variables:
   NOTION_API_KEY      Notion integration API key (required)
-  OPENAI_API_KEY      OpenAI API key for embeddings (required)
+  GEMINI_API_KEY      Google Gemini API key for embeddings (required)
+  GOOGLE_API_KEY      Alternative Google API key (used if GEMINI_API_KEY not set)
   CHROMA_PERSIST_DIR  ChromaDB storage directory (optional)
         """
     )

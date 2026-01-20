@@ -1,0 +1,63 @@
+# Tool Configuration
+# 각 Tool의 활성화/비활성화 및 세부 설정
+
+tools:
+  # Notion Search Tool
+  notion_search:
+    enabled: true
+    timeout_seconds: 30
+    max_retries: 3
+    cache_enabled: false
+    # Tool-specific settings (legacy_config로 전달)
+    collection_name: "internal_ops_notion"
+
+  # Slack Search Tool
+  slack_search:
+    enabled: true
+    timeout_seconds: 30
+    max_retries: 3
+    cache_enabled: false
+    # Tool-specific settings
+    collection_name: "internal_ops_slack"
+
+  # Task Creation Tool
+  task_creation:
+    enabled: true
+    timeout_seconds: 60
+    max_retries: 2
+    # Tool-specific settings
+    # project_database_id: "${NOTION_PROJECT_DB_ID}"
+    # task_database_id: "${NOTION_TASK_DB_ID}"
+
+# Intent Router Configuration
+intent:
+  # LLM 기반 인텐트 분류 사용 여부
+  use_llm_fallback: true          # Quick match 실패 시 LLM 사용
+  quick_match_only: false         # true면 LLM 사용 안함 (빠름)
+
+  # LLM 설정
+  llm_model: "${LLM_MODEL:gemini/gemini-1.5-flash}"
+  llm_temperature: 0.1            # 낮은 temperature로 일관된 분류
+  llm_timeout: 10.0
+
+  # 신뢰도 임계값
+  confidence_threshold: 0.5       # 이 이상이면 분류 확정
+
+  # 대화 감지
+  detect_conversation: true       # 일반 대화(인사, 감사 등) 감지
+
+  # 커스텀 패턴 (정규식)
+  # 기본 패턴에 추가됨
+  custom_patterns:
+    # 예시: 특정 프로젝트명으로 검색
+    # project_search:
+    #   patterns:
+    #     - "프로젝트\\s+(.+)\\s*(검색|찾아)"
+    #   intent_type: "TOOL_SEARCH"
+    #   tool_name: "notion_search"
+
+# Tool Registry Configuration
+registry:
+  allow_override: false   # 기존 Tool 덮어쓰기 허용
+  auto_initialize: true   # 등록 시 자동 초기화
+  lazy_loading: true      # 지연 로딩 사용

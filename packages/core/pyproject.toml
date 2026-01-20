@@ -14,13 +14,22 @@ chromadb = "^0.4"
 tiktoken = "^0.5"
 httpx = "^0.25"
 pyyaml = "^6.0"
+litellm = "^1.40"  # Unified LLM Gateway (supports 100+ providers)
 
 # Optional vector stores
 pymilvus = {version = "^2.4", optional = true}
 
+# Optional observability
+langfuse = {version = "^2.0", optional = true}
+
+# Optional LLM providers (litellm handles most, but direct access available)
+google-generativeai = {version = "^0.5", optional = true}
+
 [tool.poetry.extras]
 milvus = ["pymilvus"]
-all = ["pymilvus"]
+observability = ["langfuse"]
+google = ["google-generativeai"]
+all = ["pymilvus", "langfuse", "google-generativeai"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"

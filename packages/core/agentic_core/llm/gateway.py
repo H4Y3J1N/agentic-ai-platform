@@ -23,12 +23,14 @@ class ModelProvider(str, Enum):
     """지원 프로바이더"""
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
+    GEMINI = "gemini"
     OLLAMA = "ollama"
     AZURE = "azure"
     BEDROCK = "bedrock"
     VERTEX = "vertex_ai"
     GROQ = "groq"
     TOGETHER = "together_ai"
+    VLLM = "vllm"
 
 
 @dataclass
@@ -270,16 +272,23 @@ class LLMGateway:
             return ModelProvider.OPENAI.value
         elif model.startswith("claude-"):
             return ModelProvider.ANTHROPIC.value
+        elif model.startswith("gemini/") or model.startswith("gemini-"):
+            return ModelProvider.GEMINI.value
         elif model.startswith("ollama/"):
             return ModelProvider.OLLAMA.value
         elif model.startswith("azure/"):
             return ModelProvider.AZURE.value
         elif model.startswith("bedrock/"):
             return ModelProvider.BEDROCK.value
+        elif model.startswith("vertex_ai/"):
+            return ModelProvider.VERTEX.value
         elif model.startswith("groq/"):
             return ModelProvider.GROQ.value
         elif model.startswith("together_ai/"):
             return ModelProvider.TOGETHER.value
+        elif model.startswith("hosted_vllm/") or model.startswith("openai/"):
+            # vLLM uses OpenAI-compatible API
+            return ModelProvider.VLLM.value
         else:
             return "unknown"
 
@@ -294,6 +303,49 @@ class LLMGateway:
         # 최근 100개만 유지
         if len(self._latencies) > 100:
             self._latencies = self._latencies[-100:]
+
+    async def chat_stream(
+        self,
+        messages: Union[str, List[Message], List[Dict[str, str]]],
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        **kwargs
+    ):
+        """
+        스트리밍 LLM 채팅 호출
+
+        Args:
+            messages: 메시지
+            model: 모델 이름
+            temperature: 온도
+            **kwargs: 추가 파라미터
+
+        Yields:
+            응답 청크 (문자열)
+        """
+        from litellm import acompletion
+
+        normalized_messages = self._normalize_messages(messages)
+        effective_model = model or self.config.default_model
+        effective_temp = temperature if temperature is not None else self.config.temperature
+
+        try:
+            stream = await acompletion(
+                model=effective_model,
+                messages=normalized_messages,
+                temperature=effective_temp,
+                timeout=self.config.timeout,
+                stream=True,
+                **kwargs
+            )
+
+            async for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+
+        except Exception as e:
+            logger.error(f"Streaming LLM call failed: {e}")
+            raise
 
     def chat_sync(
         self,

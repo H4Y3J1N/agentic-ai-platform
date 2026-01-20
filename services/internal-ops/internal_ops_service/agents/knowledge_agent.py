@@ -1,62 +1,129 @@
 """
 Knowledge Agent - Answers questions using RAG over internal knowledge bases
+
+Advanced RAG 전략을 사용하여 문서 기반 질의응답 수행:
+- SingleShotRAG: 기본 RAG (검색 → 답변)
+- CorrectiveRAG: 품질 평가 + 자동 재검색
+- SelfRAG: 자기 검증 + 답변 수정
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, AsyncIterator
 import os
+import sys
 import logging
+from pathlib import Path
+
+# Add core package to path for imports
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "packages" / "core"))
+
+from agentic_core.observability import Tracer, get_tracer
+from agentic_core.rag import (
+    create_rag_strategy,
+    RAGStrategyConfig,
+    RAGResult,
+    RAGStrategyType,
+)
 
 logger = logging.getLogger(__name__)
 
+# Default model - Gemini
+DEFAULT_MODEL = "gemini/gemini-1.5-flash"
+
 
 class KnowledgeAgent:
-    """Agent for answering questions using RAG over internal knowledge bases"""
+    """
+    Knowledge Agent - Advanced RAG 기반 Q&A
+
+    지원하는 RAG 전략:
+    - "single_shot": 기본 RAG (빠름)
+    - "corrective": 품질 평가 후 필요시 재검색 (균형)
+    - "self_rag": 자기 검증 후 답변 수정 (정확)
+
+    Config options:
+        rag_strategy: str = "corrective"  # 사용할 RAG 전략
+        model: str = "gemini/gemini-1.5-flash"
+        use_enhanced_search: bool = True
+        query_rewriting: bool = True
+        hybrid_search: bool = True
+        reranking: bool = True
+        max_retries: int = 2  # Corrective RAG 재시도 횟수
+        critique_threshold: float = 0.7  # Self-RAG 검증 임계값
+    """
 
     NAME = "knowledge_agent"
-    DESCRIPTION = "Answers questions about internal documentation using semantic search"
+    DESCRIPTION = "Answers questions using advanced RAG strategies"
     CAPABILITIES = [
         "notion_search",
         "knowledge_qa",
-        "document_retrieval"
+        "document_retrieval",
+        "corrective_rag",
+        "self_rag"
     ]
 
     def __init__(self, config: dict = None):
         self.config = config or {}
+
+        # Search tool (lazy init)
         self._search_tool = None
-        self._openai_client = None
 
-        self.system_prompt = """You are an Internal Operations Knowledge Assistant.
-Your role is to help team members find information from our internal documentation,
-primarily stored in Notion.
+        # RAG strategy (lazy init)
+        self._rag_strategy = None
 
-When answering questions:
-1. Always cite your sources with Notion page titles and URLs
-2. If information is uncertain or incomplete, say so clearly
-3. Suggest related pages the user might want to explore
-4. For technical questions, include relevant code snippets if available
+        # Initialize Langfuse tracer
+        self._tracer: Tracer = get_tracer()
 
-If the retrieved context doesn't contain enough information to answer the question,
-clearly state that and suggest how the user might find the answer.
+        # Configuration
+        self._model = self.config.get("model", DEFAULT_MODEL)
+        self._strategy_type = self.config.get("rag_strategy", "corrective")
+        self._use_enhanced_search = self.config.get("use_enhanced_search", True)
 
-Never make up information that isn't in the retrieved context."""
+        logger.info(f"KnowledgeAgent configured with strategy: {self._strategy_type}")
 
     async def _ensure_initialized(self):
-        """Lazy initialization"""
+        """Lazy initialization of search tool and RAG strategy"""
         if self._search_tool is None:
-            from ..tools import NotionSearchTool
-            self._search_tool = NotionSearchTool(self.config)
+            if self._use_enhanced_search:
+                from ..tools import create_enhanced_search_tool
 
-        if self._openai_client is None:
-            try:
-                import openai
-            except ImportError:
-                raise ImportError("openai is required")
+                self._search_tool = create_enhanced_search_tool(
+                    collection_name="internal_ops_notion",
+                    config_dict={
+                        "query_rewriting_enabled": self.config.get("query_rewriting", True),
+                        "hybrid_search_enabled": self.config.get("hybrid_search", True),
+                        "reranking_enabled": self.config.get("reranking", True),
+                        "query_rewriting_model": self._model,
+                    }
+                )
+                logger.info("Using EnhancedSearchTool")
+            else:
+                from ..tools import NotionSearchTool
+                self._search_tool = NotionSearchTool(self.config)
+                logger.info("Using basic NotionSearchTool")
 
-            api_key = os.environ.get("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY environment variable required")
+        if self._rag_strategy is None:
+            # RAG Strategy 설정
+            strategy_config = RAGStrategyConfig(
+                llm_model=self._model,
+                llm_temperature=0.3,
+                top_k=5,
+                max_retries=self.config.get("max_retries", 2),
+                quality_threshold=self.config.get("quality_threshold", 0.7),
+                critique_threshold=self.config.get("critique_threshold", 0.7),
+                enable_self_critique=self.config.get("enable_self_critique", True),
+                verbose=self.config.get("verbose", False),
+            )
 
-            self._openai_client = openai.AsyncOpenAI(api_key=api_key)
+            self._rag_strategy = create_rag_strategy(
+                strategy_type=self._strategy_type,
+                config=strategy_config
+            )
+            logger.info(f"RAG Strategy initialized: {self._strategy_type}")
+
+    async def _search_fn(self, query: str, top_k: int) -> List[Dict]:
+        """검색 함수 - RAG Strategy에서 사용"""
+        results = await self._search_tool.search(query=query, top_k=top_k)
+        return results
 
     async def execute(
         self,
@@ -64,7 +131,7 @@ Never make up information that isn't in the retrieved context."""
         context: Optional[Dict[str, Any]] = None
     ) -> str:
         """
-        Execute knowledge query.
+        Execute knowledge query using configured RAG strategy.
 
         Args:
             task: The question or task to answer
@@ -77,36 +144,70 @@ Never make up information that isn't in the retrieved context."""
 
         context = context or {}
 
-        # 1. RAG retrieval
-        try:
-            relevant_docs = await self._search_tool.search(
-                query=task,
-                top_k=5
-            )
-        except Exception as e:
-            logger.error(f"Search failed: {e}")
-            return self._error_response(str(e))
+        # Start Langfuse trace
+        user_id = context.get("user_id")
+        session_id = context.get("session_id")
 
-        # 2. Check if we have relevant context
-        if not relevant_docs:
-            return self._no_results_response(task)
+        async with self._tracer.trace(
+            name="knowledge_agent",
+            user_id=user_id,
+            session_id=session_id,
+            metadata={
+                "query_preview": task[:100],
+                "rag_strategy": self._strategy_type
+            },
+            tags=["knowledge_qa", "rag", self._strategy_type]
+        ) as trace_ctx:
+            try:
+                # Execute RAG strategy
+                trace_ctx.event("strategy_start", {
+                    "strategy": self._strategy_type,
+                    "query": task[:100]
+                })
 
-        # 3. Build context with citations
-        context_with_citations = self._format_docs_with_citations(relevant_docs)
+                result: RAGResult = await self._rag_strategy.execute(
+                    query=task,
+                    search_fn=self._search_fn
+                )
 
-        # 4. Generate answer using LLM
-        try:
-            response = await self._generate_answer(task, context_with_citations)
-            return response
-        except Exception as e:
-            logger.error(f"LLM generation failed: {e}")
-            return self._error_response(str(e))
+                # Log results to Langfuse
+                trace_ctx.event("strategy_complete", {
+                    "strategy": self._strategy_type,
+                    "retrieval_quality": result.retrieval_quality.value if result.retrieval_quality else None,
+                    "total_searches": result.total_searches,
+                    "total_llm_calls": result.total_llm_calls,
+                    "execution_time_ms": result.execution_time_ms,
+                    "reasoning_steps": [str(s) for s in result.reasoning_steps]
+                })
+
+                # Log retrieval
+                if result.sources:
+                    trace_ctx.log_retrieval(
+                        query=task,
+                        results=[{
+                            "id": s.id,
+                            "content": s.content[:200],
+                            "score": s.score,
+                            "metadata": s.metadata
+                        } for s in result.sources],
+                        source="notion",
+                        top_k=len(result.sources)
+                    )
+
+                trace_ctx.log_output(result.answer)
+
+                return result.answer
+
+            except Exception as e:
+                logger.error(f"RAG execution failed: {e}")
+                trace_ctx.log_error(str(e))
+                return self._error_response(str(e))
 
     async def execute_stream(
         self,
         task: str,
         context: Optional[Dict[str, Any]] = None
-    ):
+    ) -> AsyncIterator[str]:
         """
         Execute knowledge query with streaming response.
 
@@ -119,119 +220,71 @@ Never make up information that isn't in the retrieved context."""
         """
         await self._ensure_initialized()
 
-        # 1. RAG retrieval
         try:
-            relevant_docs = await self._search_tool.search(
+            async for chunk in self._rag_strategy.execute_stream(
                 query=task,
-                top_k=5
-            )
-        except Exception as e:
-            yield f"Error searching: {e}"
-            return
-
-        if not relevant_docs:
-            yield self._no_results_response(task)
-            return
-
-        # 2. Build context
-        context_with_citations = self._format_docs_with_citations(relevant_docs)
-
-        # 3. Stream LLM response
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": f"""
-Question: {task}
-
-Retrieved Context:
-{context_with_citations}
-
-Please provide a helpful answer based on the retrieved context. Include citations.
-"""}
-        ]
-
-        try:
-            model = self.config.get("model", "gpt-4o-mini")
-
-            stream = await self._openai_client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=0.3,
-                stream=True
-            )
-
-            async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+                search_fn=self._search_fn
+            ):
+                yield chunk
 
         except Exception as e:
-            yield f"\n\nError generating response: {e}"
+            logger.error(f"Streaming execution failed: {e}")
+            yield f"\n\nError: {e}"
 
-    async def _generate_answer(
+    async def execute_with_details(
         self,
-        question: str,
-        context: str
-    ) -> str:
-        """Generate answer using LLM"""
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": f"""
-Question: {question}
+        task: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> RAGResult:
+        """
+        Execute and return full RAGResult with reasoning steps.
 
-Retrieved Context:
-{context}
+        Useful for debugging and understanding the RAG process.
 
-Please provide a helpful answer based on the retrieved context. Include citations.
-"""}
-        ]
+        Args:
+            task: The question
+            context: Optional context
 
-        model = self.config.get("model", "gpt-4o-mini")
+        Returns:
+            RAGResult with answer, sources, reasoning_steps, etc.
+        """
+        await self._ensure_initialized()
 
-        response = await self._openai_client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0.3
+        result = await self._rag_strategy.execute(
+            query=task,
+            search_fn=self._search_fn
         )
 
-        return response.choices[0].message.content
+        return result
 
-    def _format_docs_with_citations(self, docs: List[Dict]) -> str:
-        """Format documents with citation information"""
-        formatted = []
+    def set_strategy(self, strategy_type: str):
+        """
+        Change RAG strategy at runtime.
 
-        for i, doc in enumerate(docs, 1):
-            title = doc.get("title", "Untitled")
-            url = doc.get("url", "")
-            content = doc.get("content", "")
-            score = doc.get("relevance_score", 0)
+        Args:
+            strategy_type: "single_shot", "corrective", or "self_rag"
+        """
+        self._strategy_type = strategy_type
+        self._rag_strategy = None  # Will be re-initialized on next call
+        logger.info(f"RAG strategy changed to: {strategy_type}")
 
-            citation = f"[{i}] {title} (relevance: {score:.2f})"
-            if url:
-                citation += f"\n    URL: {url}"
-
-            formatted.append(f"{citation}\n\n{content}\n")
-
-        return "\n---\n".join(formatted)
-
-    def _no_results_response(self, query: str) -> str:
-        """Response when no relevant documents found"""
-        return f"""I couldn't find relevant information in our Notion workspace for: "{query}"
-
-This could mean:
-1. The information hasn't been documented yet
-2. It might be under a different topic or title
-3. The content might not be indexed yet
-
-Suggestions:
-- Try rephrasing your question with different keywords
-- Check with the relevant team directly
-- Consider creating documentation if this is a common question
-"""
+    def get_strategy_info(self) -> Dict[str, Any]:
+        """Get current strategy information"""
+        return {
+            "strategy_type": self._strategy_type,
+            "model": self._model,
+            "use_enhanced_search": self._use_enhanced_search,
+            "config": {
+                "max_retries": self.config.get("max_retries", 2),
+                "quality_threshold": self.config.get("quality_threshold", 0.7),
+                "critique_threshold": self.config.get("critique_threshold", 0.7),
+            }
+        }
 
     def _error_response(self, error: str) -> str:
         """Response when an error occurs"""
-        return f"""I encountered an error while searching for information.
+        return f"""I encountered an error while processing your question.
 
 Error: {error}
 
-Please try again or contact support if the issue persists.
-"""
+Please try again or contact support if the issue persists."""
